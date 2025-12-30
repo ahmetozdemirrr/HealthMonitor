@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    <color name="sage_green_light">#B2C4A1</color>
+    <color name="sage_green_dark">#558B2F</color>
+    <color name="sage_card_bg">#F1F8E9</color>
+    <color name="bg_grey">#F5F5F5</color>
+    <color name="chart_line">#7CB342</color>
+    <color name="red_accent">#E57373</color>
+    <color name="text_grey">#808080</color>
+    <color name="orange_warm">#FF8A65</color>
+    <color name="blue_activity">#4FC3F7</color>
+    <color name="glass_white">#99FFFFFF</color>
+    <color name="cyan_oxygen">#4169E1</color>
+    <color name="sage_green_pale">#E6EFE6</color>
+</resources>

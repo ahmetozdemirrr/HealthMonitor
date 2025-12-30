@@ -1,0 +1,18 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <style name="Base.Theme.HealthMonitor" parent="Theme.Material3.Light.NoActionBar">
+
+        <item name="colorSecondaryContainer">@color/sage_green_light</item>
+
+        <item name="colorOnSecondaryContainer">@color/sage_green_dark</item>
+
+        <item name="colorPrimary">@color/sage_green_dark</item>
+        <item name="android:statusBarColor">@color/sage_green_light</item> <item name="android:windowLightStatusBar">true</item> </style>
+
+    <style name="Theme.HealthMonitor" parent="Base.Theme.HealthMonitor" />
+
+    <style name="AppTheme.Picker" parent="Theme.MaterialComponents.Light.Dialog">
+        <item name="colorControlNormal">@color/sage_green_dark</item>
+        <item name="android:textColorPrimary">@color/black</item>
+        <item name="android:textSize">20sp</item>
+    </style>
+</resources>
