@@ -3,28 +3,26 @@ package com.ahmet.healthmonitor
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
-// Verileri tutacak model sınıfımız
+// Verileri tutacak model sınıfımız (SpO2 Kaldırıldı)
 data class HealthData(
     val isWorn: Boolean,      // Takılı mı?
     val isIdle: Boolean,      // Uyuyor mu?
     val stepCount: Int,       // Adım
     val temperature: Float,   // Vücut Isısı
-    val spo2: Float,          // Oksijen
-    val heartRateRaw: Int     // Nabız Sinyali (Grafik için)
+    val heartRateRaw: Int     // Nabız Sinyali
 )
 
 object BleDataParser {
     fun parse(bytes: ByteArray): HealthData {
-        // Paket boyutu kontrolü (Protokolümüz 17 byte)
-        if (bytes.size < 17) {
-            return HealthData(false, false, 0, 0f, 0f, 0)
+        // Paket boyutu kontrolü (SpO2 gittiği için boyut 4 byte azalabilir)
+        // Güvenlik için minimum boyutu kontrol ediyoruz
+        if (bytes.size < 13) {
+            return HealthData(false, false, 0, 0f, 0)
         }
 
-        // ESP32 "Little Endian" gönderir, Android "Big Endian" okur.
-        // Bunu düzeltmek için order(ByteOrder.LITTLE_ENDIAN) şarttır.
         val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
 
-        // --- OKUMA SIRASI (ESP32 struct yapısıyla aynı olmalı) ---
+        // --- OKUMA SIRASI ---
 
         // 1. Byte: Bayraklar (Flags)
         val flags = buffer.get().toInt()
@@ -37,10 +35,9 @@ object BleDataParser {
         // 3. Float (4 Byte): Sıcaklık
         val temp = buffer.float
 
-        // 4. Float (4 Byte): SpO2
-        val spo2 = buffer.float
+        // (SpO2 okuma satırı buradan silindi)
 
-        // 5. UInt32 (4 Byte): IR / Ham Nabız
+        // 4. UInt32 (4 Byte): IR / Ham Nabız
         val irValue = buffer.int
 
         return HealthData(
@@ -48,7 +45,6 @@ object BleDataParser {
             isIdle = isIdle,
             stepCount = steps,
             temperature = temp,
-            spo2 = spo2,
             heartRateRaw = irValue
         )
     }

@@ -15,10 +15,10 @@ import com.ahmet.healthmonitor.databinding.FragmentHomeBinding
 class HomeFragment : Fragment() {
     private lateinit var binding: FragmentHomeBinding
 
-    // Veri değişimini dinleyecek listener
+    // Veri değişimini dinleyecek listener (live_spo2 kaldırıldı)
     private val preferenceListener = SharedPreferences.OnSharedPreferenceChangeListener { sharedPreferences, key ->
         when (key) {
-            "live_hr", "live_spo2", "live_temp", "live_steps" -> {
+            "live_hr", "live_temp", "live_steps" -> {
                 updateDashboardUI(sharedPreferences)
             }
         }
@@ -52,13 +52,13 @@ class HomeFragment : Fragment() {
 
         activity?.runOnUiThread {
             val hr = sharedPref.getInt("live_hr", 0)
-            val spo2 = sharedPref.getInt("live_spo2", 0)
+            // spo2 değişkeni kaldırıldı
             val temp = sharedPref.getFloat("live_temp", 0.0f)
             val steps = sharedPref.getInt("live_steps", 0)
 
-            // Değerleri yazdır (0 gelirse varsayılan olarak -- gösterilebilir ama şimdilik direkt yazıyoruz)
+            // Değerleri yazdır
             binding.tvHeartRate.text = if (hr > 0) hr.toString() else "--"
-            binding.tvSpo2.text = if (spo2 > 0) "$spo2%" else "--%"
+            // tvSpo2 satırı kaldırıldı. XML'den de silebilirsiniz.
             binding.tvTemp.text = if (temp > 0) "${String.format("%.1f", temp)}°C" else "--°C"
             binding.tvSteps.text = if (steps > 0) steps.toString() else "0"
         }

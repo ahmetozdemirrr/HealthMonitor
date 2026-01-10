@@ -11,7 +11,7 @@ object DatabaseManager {
     // Arka plan işlemleri için Executor (UI donmasın diye)
     private val executor = Executors.newSingleThreadExecutor()
 
-    fun saveLiveReading(context: Context, hr: Int, spo2: Int, temp: Float, steps: Int) {
+    fun saveLiveReading(context: Context, hr: Int, temp: Float, steps: Int) {
         executor.execute {
             try {
                 val db = HealthDatabase.getDatabase(context)
@@ -29,7 +29,7 @@ object DatabaseManager {
                         date = today,
                         steps = steps,
                         avgHr = hr,
-                        avgSpo2 = spo2,
+                        // avgSpo2 silindi
                         avgTemp = temp,
                         dataCount = 1
                     )
@@ -38,20 +38,17 @@ object DatabaseManager {
                     val count = existingLog.dataCount
                     val newCount = count + 1
 
-                    // Adım sayısı: ESP32 kümülatif gönderiyorsa direkt yenisini al.
-                    // Eğer anlık artış gönderiyorsa (existing.steps + steps) yapmalısın.
-                    // Senin simülasyonunda kümülatif artıyor (steps += rand), o yüzden direkt alıyoruz.
                     val updatedSteps = if (steps > existingLog.steps) steps else existingLog.steps
 
                     val newAvgHr = ((existingLog.avgHr * count) + hr) / newCount
-                    val newAvgSpo2 = ((existingLog.avgSpo2 * count) + spo2) / newCount
+                    // newAvgSpo2 silindi
                     val newAvgTemp = ((existingLog.avgTemp * count) + temp) / newCount
 
                     DailyHealthLog(
                         date = today,
                         steps = updatedSteps,
                         avgHr = newAvgHr,
-                        avgSpo2 = newAvgSpo2,
+                        // avgSpo2 silindi
                         avgTemp = newAvgTemp,
                         dataCount = newCount
                     )
@@ -60,7 +57,7 @@ object DatabaseManager {
                 dao.insertLog(newLog)
                 Log.d(TAG, "Data saved to DB: $newLog")
 
-                // Temizlik işlemini her kayıtta değil, %5 ihtimalle yap (Performans için)
+                // Temizlik işlemini her kayıtta değil, %5 ihtimalle yap
                 if ((0..20).random() == 0) {
                     cleanOldData(context)
                 }

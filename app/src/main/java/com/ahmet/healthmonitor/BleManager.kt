@@ -3,13 +3,14 @@ package com.ahmet.healthmonitor
 import android.annotation.SuppressLint
 import android.bluetooth.*
 import android.content.Context
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import java.util.*
 
 object BleManager {
-    // ESP32 ile AYNI UUID'ler (0x00FF Servisi ve 0xFF01 Karakteristiği)
+    // UUID Tanımları (ESP32 ile birebir aynı)
     private val SERVICE_UUID = UUID.fromString("000000ff-0000-1000-8000-00805f9b34fb")
     private val CHAR_UUID = UUID.fromString("0000ff01-0000-1000-8000-00805f9b34fb")
     private val DESCRIPTOR_UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
@@ -19,43 +20,41 @@ object BleManager {
     private var isConnected = false
 
     var onConnectionStateChanged: ((Boolean) -> Unit)? = null
-
-    // GÜNCELLEME: String yerine ByteArray kullanıyoruz (Binary Veri)
     var onDataReceived: ((ByteArray) -> Unit)? = null
 
+    // Context referansını saklamak yerine processData içinde kullanmak için init fonksiyonunu koruyoruz
+    private var appContext: Context? = null
+
     fun init(context: Context) {
+        appContext = context.applicationContext
         val manager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
         bluetoothAdapter = manager.adapter
     }
 
     @SuppressLint("MissingPermission")
-    fun startScanning(context: Context) {
-        // Tarama işlemleri genellikle UI tarafında (SettingsFragment vs) yönetildiği için
-        // burayı ihtiyacına göre doldurabilirsin veya boş bırakabilirsin.
-    }
-
-    @SuppressLint("MissingPermission")
     fun connectDirectly(context: Context, device: BluetoothDevice) {
-        Log.d("BLE", "Connecting to ${device.address}...")
-        bluetoothGatt = device.connectGatt(context, false, gattCallback)
+        Log.d("BLE", "Bağlanılıyor: ${device.address}")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            bluetoothGatt = device.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
+        } else {
+            bluetoothGatt = device.connectGatt(context, false, gattCallback)
+        }
     }
 
     private val gattCallback = object : BluetoothGattCallback() {
         @SuppressLint("MissingPermission")
         override fun onConnectionStateChange(gatt: BluetoothGatt?, status: Int, newState: Int) {
             if (newState == BluetoothProfile.STATE_CONNECTED) {
-                Log.d("BLE", "Connected to GATT server.")
+                Log.d("BLE", "GATT Sunucusuna Bağlandı.")
                 isConnected = true
 
                 Handler(Looper.getMainLooper()).post {
                     onConnectionStateChanged?.invoke(true)
                 }
-
-                // Veri paketimiz küçük (17 byte) olsa da MTU istemek iyi bir alışkanlıktır.
                 gatt?.requestMtu(512)
 
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
-                Log.d("BLE", "Disconnected from GATT server.")
+                Log.d("BLE", "Bağlantı Koptu.")
                 isConnected = false
 
                 Handler(Looper.getMainLooper()).post {
@@ -67,27 +66,23 @@ object BleManager {
             }
         }
 
-        // MTU değiştikten sonra servisleri tarıyoruz
         @SuppressLint("MissingPermission")
         override fun onMtuChanged(gatt: BluetoothGatt?, mtu: Int, status: Int) {
-            super.onMtuChanged(gatt, mtu, status)
-            Log.d("BLE", "MTU Changed to: $mtu, Status: $status")
+            Log.d("BLE", "MTU Değişti: $mtu. Servisler taranıyor...")
             gatt?.discoverServices()
         }
 
         @SuppressLint("MissingPermission")
         override fun onServicesDiscovered(gatt: BluetoothGatt?, status: Int) {
-            if (status == BluetoothGatt.GATT_SUCCESS) {
-                val service = gatt?.getService(SERVICE_UUID)
+            if (status == BluetoothGatt.GATT_SUCCESS && gatt != null) {
+                val service = gatt.getService(SERVICE_UUID)
                 if (service != null) {
                     val characteristic = service.getCharacteristic(CHAR_UUID)
                     if (characteristic != null) {
-                        // Bildirimleri (Notification) Aktif Et
                         gatt.setCharacteristicNotification(characteristic, true)
-
                         val descriptor = characteristic.getDescriptor(DESCRIPTOR_UUID)
-                        if(descriptor != null) {
-                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                        if (descriptor != null) {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                                 gatt.writeDescriptor(descriptor, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
                             } else {
                                 @Suppress("DEPRECATION")
@@ -95,45 +90,68 @@ object BleManager {
                                 @Suppress("DEPRECATION")
                                 gatt.writeDescriptor(descriptor)
                             }
-                            Log.d("BLE", "Notifications enabled.")
                         }
                     }
                 }
             }
         }
 
-        // Eski Android sürümleri için veri alma
-        @Deprecated("Deprecated in Java")
-        override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
-            @Suppress("DEPRECATION")
-            val dataBytes = characteristic.value
-
-            // Veriyi hiç işlemeden (String yapmadan) direkt gönderiyoruz
-            Handler(Looper.getMainLooper()).post {
-                onDataReceived?.invoke(dataBytes)
+        override fun onDescriptorWrite(gatt: BluetoothGatt?, descriptor: BluetoothGattDescriptor?, status: Int) {
+            if (status == BluetoothGatt.GATT_SUCCESS) {
+                Log.d("BLE", "BAŞARILI: Bildirimler resmen aktif!")
             }
         }
 
-        // Yeni Android sürümleri (API 33+) için veri alma
         override fun onCharacteristicChanged(
             gatt: BluetoothGatt,
             characteristic: BluetoothGattCharacteristic,
             value: ByteArray
         ) {
-            // Veriyi hiç işlemeden direkt gönderiyoruz
+            processData(value)
+        }
+
+        @Deprecated("Deprecated in Java")
+        override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
+            @Suppress("DEPRECATION")
+            processData(characteristic.value)
+        }
+
+        private fun processData(data: ByteArray) {
+            // 1. Veriyi Parse Et
+            val healthData = BleDataParser.parse(data)
+
+            // 2. SharedPreferences'a Kaydet (Canlı Veri)
+            appContext?.let { ctx ->
+                val sharedPref = ctx.getSharedPreferences("HealthApp", Context.MODE_PRIVATE)
+                with(sharedPref.edit()) {
+                    putInt("live_hr", healthData.heartRateRaw)
+                    putFloat("live_temp", healthData.temperature)
+                    putInt("live_steps", healthData.stepCount)
+                    // SpO2 kaydı silindi
+                    apply()
+                }
+
+                // 3. Veritabanına Kaydet
+                DatabaseManager.saveLiveReading(
+                    ctx,
+                    healthData.heartRateRaw,
+                    healthData.temperature,
+                    healthData.stepCount
+                    // SpO2 parametresi silindi
+                )
+            }
+
             Handler(Looper.getMainLooper()).post {
-                onDataReceived?.invoke(value)
+                onDataReceived?.invoke(data)
             }
         }
     }
 
     @SuppressLint("MissingPermission")
     fun disconnect() {
-        if (bluetoothGatt != null) {
-            bluetoothGatt?.disconnect()
-            bluetoothGatt?.close()
-            bluetoothGatt = null
-        }
+        bluetoothGatt?.disconnect()
+        bluetoothGatt?.close()
+        bluetoothGatt = null
         isConnected = false
         onConnectionStateChanged?.invoke(false)
     }

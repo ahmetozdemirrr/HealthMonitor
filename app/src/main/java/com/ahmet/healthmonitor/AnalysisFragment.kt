@@ -41,16 +41,16 @@ class AnalysisFragment : Fragment() {
         // 2. Simüle edilmiş veya SharedPreferences'tan alınan veriler
         // (Burada gerçek verilerini çekeceksin)
         val heartRate = 78
-        val spo2 = 98
+        // spo2 kaldırıldı
         val temp = 36.5
         val steps = 4520
 
         // 3. Prompt Hazırla (Mühendislik Kısmı Burası)
+        // SpO2 satırı prompt'tan çıkarıldı.
         val prompt = """
             Act as a professional health consultant. Analyze the following user data collected from a smart wristband:
             
             - Heart Rate: $heartRate BPM
-            - Blood Oxygen (SpO2): $spo2 %
             - Skin Temperature: $temp °C
             - Steps Today: $steps
             

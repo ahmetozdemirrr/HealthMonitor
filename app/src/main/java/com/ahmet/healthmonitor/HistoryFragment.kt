@@ -29,8 +29,8 @@ class HistoryFragment : Fragment() {
         val fullDate: String = "",
         val avgHr: Int = 0,
         val steps: Int = 0,
-        val spo2: Int = 0,
         val temp: Double = 0.0
+        // spo2 alanı silindi
     )
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
@@ -41,8 +41,6 @@ class HistoryFragment : Fragment() {
     override fun onResume() {
         super.onResume()
         updateChartTarget()
-
-        // Veriyi her açılışta yenile
         prepareData()
         setupInfiniteCalendar()
     }
@@ -57,32 +55,28 @@ class HistoryFragment : Fragment() {
     private fun prepareData() {
         realDataList.clear()
 
-        // 1. Canlı verileri çek (Bugün için)
+        // 1. Canlı verileri çek
         val sharedPref = requireActivity().getSharedPreferences("HealthApp", Context.MODE_PRIVATE)
         val liveHr = sharedPref.getInt("live_hr", 0)
         val liveSteps = sharedPref.getInt("live_steps", 0)
-        val liveSpo2 = sharedPref.getInt("live_spo2", 0)
+        // liveSpo2 silindi
         val liveTemp = sharedPref.getFloat("live_temp", 0f).toDouble()
 
         // 2. Veritabanından Geçmişi Çek
-        // DatabaseManager'dan son 7 günü alıyoruz
         val dbHistoryList = DatabaseManager.getLast7Days(requireContext())
-        // Tarihe göre kolay erişim için Map'e çeviriyoruz (Anahtar: "yyyy-MM-dd")
         val historyMap = dbHistoryList.associateBy { it.date }
 
         // 3. Listenin başına AVG ekle
         realDataList.add(DayData("AVG", "ALL", true))
 
-        // 4. Günleri Oluştur (Son 7 Gün)
+        // 4. Günleri Oluştur
         val calendar = Calendar.getInstance()
-        val dayFormat = SimpleDateFormat("EEE", Locale.ENGLISH) // Pzt, Sal
-        val numFormat = SimpleDateFormat("dd", Locale.ENGLISH)  // 14, 15
-        val fullFormat = SimpleDateFormat("MMMM dd, yyyy", Locale.ENGLISH) // December 14, 2025
-
-        // Veritabanı ile eşleşecek tarih formatı
+        val dayFormat = SimpleDateFormat("EEE", Locale.ENGLISH)
+        val numFormat = SimpleDateFormat("dd", Locale.ENGLISH)
+        val fullFormat = SimpleDateFormat("MMMM dd, yyyy", Locale.ENGLISH)
         val dbDateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
 
-        calendar.add(Calendar.DAY_OF_YEAR, -6) // 6 gün geriye git
+        calendar.add(Calendar.DAY_OF_YEAR, -6)
 
         for (i in 0..6) {
             val isToday = (i == 6)
@@ -90,33 +84,19 @@ class HistoryFragment : Fragment() {
 
             var hr = 0
             var steps = 0
-            var spo2 = 0
             var temp = 0.0
 
             if (isToday) {
-                // --- BUGÜN ---
-                // Canlı verileri kullan
                 hr = liveHr
                 steps = liveSteps
-                spo2 = liveSpo2
                 temp = liveTemp
             } else {
-                // --- GEÇMİŞ GÜNLER ---
-                // Veritabanında bu tarihe ait kayıt var mı?
                 val historyLog = historyMap[currentDateKey]
-
                 if (historyLog != null) {
-                    // Kayıt varsa verileri al
                     hr = historyLog.avgHr
                     steps = historyLog.steps
-                    spo2 = historyLog.avgSpo2
                     temp = historyLog.avgTemp.toDouble()
-                } else {
-                    // Kayıt yoksa 0 olarak kalır (Rastgele veri YOK)
-                    hr = 0
-                    steps = 0
-                    spo2 = 0
-                    temp = 0.0
+                    // spo2 okuması silindi
                 }
             }
 
@@ -127,19 +107,16 @@ class HistoryFragment : Fragment() {
                 fullDate = fullFormat.format(calendar.time),
                 avgHr = hr,
                 steps = steps,
-                spo2 = spo2,
                 temp = temp
+                // spo2 ataması silindi
             ))
             calendar.add(Calendar.DAY_OF_YEAR, 1)
         }
     }
 
     private fun setupInfiniteCalendar() {
-        // Eğer adapter zaten varsa sadece veriyi güncelle, tekrar oluşturma (Performans ve UI titremesi için)
         if (::calendarAdapter.isInitialized && binding.rvCalendar.adapter != null) {
-            // Adapter zaten var, sadece scroll yapıp bırakabiliriz veya dataset değiştiği için resetleyebiliriz.
-            // Ancak Infinite döngüde pozisyon kaybolmaması için en temizi yeniden set etmektir.
-            // Şimdilik senin yapını koruyarak yeniden oluşturuyorum:
+            // Mevcut durumu koru
         }
 
         val layoutManager = LinearLayoutManager(context, LinearLayoutManager.HORIZONTAL, false)
@@ -150,7 +127,6 @@ class HistoryFragment : Fragment() {
         }
         binding.rvCalendar.adapter = calendarAdapter
 
-        // SnapHelper daha önce eklendiyse hata vermemesi için kontrolsüz ekleme yapmıyoruz
         binding.rvCalendar.onFlingListener = null
         val snapHelper = LinearSnapHelper()
         snapHelper.attachToRecyclerView(binding.rvCalendar)
@@ -173,15 +149,13 @@ class HistoryFragment : Fragment() {
             binding.layoutSummaryMode.visibility = View.VISIBLE
 
             binding.tvSummaryTitle.text = data.fullDate
-            // Değer 0 ise "--" göster, değilse değeri göster
             binding.tvDailyHr.text = if (data.avgHr > 0) data.avgHr.toString() else "--"
             binding.tvDailySteps.text = if (data.steps > 0) data.steps.toString() else "--"
-            binding.tvDailySpo2.text = if (data.spo2 > 0) "${data.spo2}%" else "--%"
             binding.tvDailyTemp.text = if (data.temp > 0) String.format("%.1f", data.temp) else "--"
+            // tvDailySpo2 ataması silindi (XML'den de silmeyi unutma veya görünmez yap)
         }
     }
 
-    // Adapter Sınıfı
     inner class InfiniteCalendarAdapter(
         private val data: List<DayData>,
         private val onItemClick: (DayData) -> Unit

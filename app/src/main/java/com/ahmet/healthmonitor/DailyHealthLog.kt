@@ -10,7 +10,7 @@ data class DailyHealthLog(
 
     val steps: Int,
     val avgHr: Int,
-    val avgSpo2: Int,
+    // avgSpo2 silindi
     val avgTemp: Float,
 
     // Ortalamayı doğru hesaplamak için o gün kaç veri geldiğini tutuyoruz

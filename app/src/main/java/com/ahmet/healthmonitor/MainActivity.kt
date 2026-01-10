@@ -2,6 +2,7 @@ package com.ahmet.healthmonitor
 
 import android.content.Context
 import android.os.Bundle
+import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.viewpager2.widget.ViewPager2
@@ -18,11 +19,12 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        // ViewPager ve BottomNav Ayarları
+        // Adapter Kurulumu
         val adapter = ViewPagerAdapter(this)
         binding.viewPager.adapter = adapter
         binding.viewPager.offscreenPageLimit = 3
 
+        // 1. KAYDIRMA OLAYI
         binding.viewPager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
             override fun onPageSelected(position: Int) {
                 super.onPageSelected(position)
@@ -35,6 +37,7 @@ class MainActivity : AppCompatActivity() {
             }
         })
 
+        // 2. BUTON OLAYI
         binding.bottomNavigation.setOnItemSelectedListener { item ->
             when (item.itemId) {
                 R.id.nav_home -> binding.viewPager.currentItem = 0
@@ -45,40 +48,42 @@ class MainActivity : AppCompatActivity() {
             true
         }
 
-        // --- BLE VERİ İŞLEME MERKEZİ ---
-        // BleManager başlatıldıktan sonra callback atanıyor
+        // --- BLE VERİ MERKEZİ ---
+        // Uygulama açılınca BLE yöneticisini başlat
         BleManager.init(this)
 
+        // Veri geldiğinde ne yapılacağını tanımla
         BleManager.onDataReceived = { bytes ->
-            // 1. Gelen Binary veriyi model sınıfına çevir
-            val data = BleDataParser.parse(bytes)
+            try {
+                // 1. Binary veriyi anlamlı modele çevir
+                val data = BleDataParser.parse(bytes)
 
-            // 2. Verileri SharedPreferences'a kaydet (Böylece HomeFragment görür)
-            saveDataToPreferences(data)
+                // 2. Verileri kaydet (HomeFragment buradan okuyacak)
+                saveDataToPreferences(data)
+
+                // SpO2 logu kaldırıldı
+                Log.d("BLE_DATA", "Adım: ${data.stepCount}, Temp: ${data.temperature}")
+            } catch (e: Exception) {
+                Log.e("BLE_DATA", "Veri işleme hatası: ${e.message}")
+            }
         }
     }
 
     private fun saveDataToPreferences(data: HealthData) {
         val sharedPref = getSharedPreferences("HealthApp", Context.MODE_PRIVATE)
 
-        // Verileri kaydet
         with(sharedPref.edit()) {
-            putInt("live_hr", data.heartRateRaw) // Ham IR şimdilik HR gibi davranacak
-            putInt("live_spo2", data.spo2.toInt())
+            // Canlı değerleri güncelle
+            putInt("live_hr", data.heartRateRaw) // Ham sinyal veya nabız
+            // live_spo2 satırı silindi
             putFloat("live_temp", data.temperature)
             putInt("live_steps", data.stepCount)
 
-            // Eğer isIdle (Uyku) durumu varsa bunu da kaydedebilirsin
+            // Durum bilgilerini de ekleyebiliriz
             putBoolean("is_worn", data.isWorn)
+            putBoolean("is_idle", data.isIdle)
 
-            apply() // Asenkron kaydet
+            apply() // Asenkron kaydet (UI'ı kilitlemez)
         }
-
-        // Opsiyonel: Veritabanına kaydet (Sadece anlamlı veri varsa)
-        /*
-        if (data.isWorn && data.spo2 > 0) {
-            DatabaseManager.saveLiveReading(this, data.heartRateRaw, data.spo2.toInt(), data.temperature, data.stepCount)
-        }
-        */
     }
 }
