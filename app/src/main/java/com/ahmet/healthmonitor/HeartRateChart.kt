@@ -30,18 +30,29 @@ class HeartRateChart @JvmOverloads constructor(
         textAlign = Paint.Align.CENTER
     }
 
-    // Dummy Veriler (Son 7 günün nabız değerleri)
-    private val dataPoints = listOf(65, 60, 90, 75, 85, 98, 68)
-    private val days = listOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat") // Dinamik güncellenecek
+    private var dataPoints: List<Int> = listOf()
+    private var days: List<String> = listOf()
+
+    // Veriyi güncellemek için metod
+    fun setChartData(newData: List<Int>, newDays: List<String>) {
+        this.dataPoints = newData
+        this.days = newDays
+        invalidate() // Tekrar çiz
+    }
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
+
+        if (dataPoints.isEmpty()) return
 
         val width = width.toFloat()
         val height = height.toFloat()
         val padding = 60f
         val chartHeight = height - padding * 2
-        val stepX = (width - padding * 2) / (dataPoints.size - 1)
+
+        // Veri sayısına göre stepX belirle (en az 1 olmalı)
+        val divCount = if (dataPoints.size > 1) dataPoints.size - 1 else 1
+        val stepX = (width - padding * 2) / divCount
 
         // Y Eksenindeki çizgiler ve yazılar (60-100 arası)
         val ySteps = 5 // 60, 70, 80, 90, 100
@@ -51,7 +62,7 @@ class HeartRateChart @JvmOverloads constructor(
 
             // Yatay çizgiler
             linePaint.strokeWidth = 2f
-            linePaint.color = Color.parseColor("#E0E0E0") // Çok açık gri
+            linePaint.color = Color.parseColor("#E0E0E0")
             canvas.drawLine(padding, yPos, width - padding, yPos, linePaint)
 
             // Yazılar
@@ -63,47 +74,82 @@ class HeartRateChart @JvmOverloads constructor(
         val path = Path()
         val fillPath = Path() // Altını doldurmak için kapalı şekil
 
-        // Başlangıç noktası
-        val startY = mapValueToY(dataPoints[0], chartHeight, padding, height)
-        path.moveTo(padding, startY)
-        fillPath.moveTo(padding, height - padding) // Alt sol köşe
-        fillPath.lineTo(padding, startY)
-
         linePaint.strokeWidth = 8f
         linePaint.color = ContextCompat.getColor(context, R.color.sage_green_dark)
 
-        for (i in 0 until dataPoints.size - 1) {
-            val thisX = padding + i * stepX
-            val thisY = mapValueToY(dataPoints[i], chartHeight, padding, height)
-            val nextX = padding + (i + 1) * stepX
-            val nextY = mapValueToY(dataPoints[i + 1], chartHeight, padding, height)
+        var isFirstPoint = true
+        var pathStarted = false
 
-            // Bezier Curve (Yumuşak geçiş)
-            val controlX1 = (thisX + nextX) / 2
-            val controlY1 = thisY
-            val controlX2 = (thisX + nextX) / 2
-            val controlY2 = nextY
+        for (i in dataPoints.indices) {
+            val value = dataPoints[i]
+            // Sadece değeri 0'dan büyük olanları çiz (Boş günler atlanır)
+            if (value > 0) {
+                val thisX = padding + i * stepX
+                val thisY = mapValueToY(value, chartHeight, padding, height)
 
-            path.cubicTo(controlX1, controlY1, controlX2, controlY2, nextX, nextY)
-            fillPath.cubicTo(controlX1, controlY1, controlX2, controlY2, nextX, nextY)
+                if (isFirstPoint) {
+                    path.moveTo(thisX, thisY)
+                    fillPath.moveTo(thisX, height - padding)
+                    fillPath.lineTo(thisX, thisY)
+                    isFirstPoint = false
+                    pathStarted = true
+                } else {
+                    // Önceki nokta ile bezier curve yapalım mı?
+                    // Eğer önceki nokta 0 ise (atlandıysa), moveTo yapmalıyız.
+                    // Bu basit mantıkta, önceki noktayı tutmadığımız için direkt lineTo yaparsak,
+                    // aradaki 0 olan günlerin üzerinden çizgi geçer.
+                    // Ancak "çizmeyebilir" dendiği için, eğer önceki gün 0 ise path kopuk olmalı.
+
+                    val prevValue = if(i > 0) dataPoints[i-1] else 0
+                    if (prevValue == 0) {
+                        // Yeni bir parça başlat
+                        path.moveTo(thisX, thisY)
+
+                        // Fill path için önceki parçayı kapatıp yenisini açmak karmaşık olabilir,
+                        // basitçe fill'i kapatıp yeniden başlatıyoruz.
+                        fillPath.lineTo(thisX, height - padding)
+                        fillPath.close() // Önceki bloğu kapat
+
+                        fillPath.moveTo(thisX, height - padding)
+                        fillPath.lineTo(thisX, thisY)
+                    } else {
+                        // Devam et
+                        val prevX = padding + (i - 1) * stepX
+                        val prevY = mapValueToY(prevValue, chartHeight, padding, height)
+
+                        val controlX1 = (prevX + thisX) / 2
+                        val controlY1 = prevY
+                        val controlX2 = (prevX + thisX) / 2
+                        val controlY2 = thisY
+
+                        path.cubicTo(controlX1, controlY1, controlX2, controlY2, thisX, thisY)
+                        fillPath.cubicTo(controlX1, controlY1, controlX2, controlY2, thisX, thisY)
+                    }
+                }
+
+                // Son nokta ise fill path'i aşağı indir
+                if (i == dataPoints.indices.lastOrNull { dataPoints[it] > 0 }) {
+                    fillPath.lineTo(thisX, height - padding)
+                }
+            }
         }
 
-        // Fill Path'i kapat
-        fillPath.lineTo(width - padding, height - padding)
         fillPath.close()
 
-        // Dolgu Rengi (Gradient)
-        val gradient = LinearGradient(0f, 0f, 0f, height,
-            ContextCompat.getColor(context, R.color.sage_green_dark),
-            Color.TRANSPARENT, Shader.TileMode.CLAMP)
-        fillPaint.shader = gradient
-        fillPaint.alpha = 50 // Şeffaflık
-        canvas.drawPath(fillPath, fillPaint)
+        if (pathStarted) {
+            // Dolgu Rengi (Gradient)
+            val gradient = LinearGradient(0f, 0f, 0f, height,
+                ContextCompat.getColor(context, R.color.sage_green_dark),
+                Color.TRANSPARENT, Shader.TileMode.CLAMP)
+            fillPaint.shader = gradient
+            fillPaint.alpha = 50 // Şeffaflık
+            canvas.drawPath(fillPath, fillPaint)
 
-        // Çizgiyi çiz
-        canvas.drawPath(path, linePaint)
+            // Çizgiyi çiz
+            canvas.drawPath(path, linePaint)
+        }
 
-        // Gün isimlerini yaz
+        // Gün isimlerini yaz (Veri olmasa da günleri yazıyoruz)
         textPaint.textAlign = Paint.Align.CENTER
         for (i in days.indices) {
             val x = padding + i * stepX
@@ -115,14 +161,8 @@ class HeartRateChart @JvmOverloads constructor(
         // 60 ile 100 arasına map ediyoruz
         val range = 100 - 60
         val normalized = (value - 60).toFloat() / range
-        return totalHeight - padding - (normalized * chartHeight)
-    }
-
-    // Dışarıdan günleri güncellemek için
-    fun setDays(newDays: List<String>) {
-        // Burada days listesi val olduğu için basitlik adına elle çiziyoruz,
-        // gerçek projede bu listeyi var yapıp güncellersin.
-        // Şimdilik sistemden günleri MainActivity'de hesaplayıp buraya paslamak gerekirdi
-        // ama görsel odaklı olduğumuz için onDraw içinde dummy kullandım.
+        // Clamp (Sınırla)
+        val clamped = normalized.coerceIn(0f, 1f)
+        return totalHeight - padding - (clamped * chartHeight)
     }
 }

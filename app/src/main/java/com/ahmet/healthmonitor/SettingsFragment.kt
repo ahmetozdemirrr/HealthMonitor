@@ -188,8 +188,7 @@ class SettingsFragment : Fragment() {
             binding.tvConnectionStatus.setTextColor(android.graphics.Color.parseColor("#00C853"))
             binding.tvConnectionStatus.setBackgroundColor(android.graphics.Color.parseColor("#DCEDC8"))
 
-            binding.layoutBattery.visibility = View.VISIBLE
-            binding.tvBatteryLevel.text = "100%" // Şimdilik sabit, sonra protokole eklenebilir
+            // Battery gösterimi kaldırıldı
 
             binding.btnScanPage.visibility = View.GONE
             binding.btnDisconnect.visibility = View.VISIBLE
@@ -199,7 +198,7 @@ class SettingsFragment : Fragment() {
             binding.tvConnectionStatus.setTextColor(android.graphics.Color.parseColor("#D32F2F"))
             binding.tvConnectionStatus.setBackgroundColor(android.graphics.Color.parseColor("#FFCDD2"))
 
-            binding.layoutBattery.visibility = View.GONE
+            // Battery gösterimi kaldırıldı
 
             binding.btnScanPage.visibility = View.VISIBLE
             binding.btnScanPage.text = "Cihaz Tara"

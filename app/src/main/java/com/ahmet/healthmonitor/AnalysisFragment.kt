@@ -1,80 +1,121 @@
 package com.ahmet.healthmonitor
 
+import android.content.Context
 import android.os.Bundle
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Toast
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import com.ahmet.healthmonitor.databinding.FragmentAnalysisBinding
 import com.google.ai.client.generativeai.GenerativeModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class AnalysisFragment : Fragment() {
 
     private lateinit var binding: FragmentAnalysisBinding
+    private val TAG = "GEMINI_TEST"
 
-    // Gemini Modelini Tanımla (API KEY BURAYA)
-    // Gerçek projede bunu local.properties'den çekmek daha güvenlidir.
-    private val generativeModel = GenerativeModel(
-        modelName = "gemini-1.5-flash",
-        apiKey = BuildConfig.GEMINI_API_KEY
+    private val modelPriorities = listOf(
+        "gemini-2.0-flash",
+        "gemini-2.5-flash",
+        "gemini-flash-latest",
+        "gemini-1.5-flash"
     )
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         binding = FragmentAnalysisBinding.inflate(inflater, container, false)
-
-        binding.btnAnalyze.setOnClickListener {
-            performAnalysis()
-        }
-
+        binding.btnAnalyze.setOnClickListener { performAnalysisWithFallback() }
         return binding.root
     }
 
-    private fun performAnalysis() {
-        // 1. UI'ı güncelle (Yükleniyor...)
+    private fun performAnalysisWithFallback() {
         binding.loadingBar.visibility = View.VISIBLE
         binding.btnAnalyze.isEnabled = false
-        binding.tvResult.text = "Consulting with AI..."
+        binding.tvResult.text = "Analyzing data..."
 
-        // 2. Simüle edilmiş veya SharedPreferences'tan alınan veriler
-        // (Burada gerçek verilerini çekeceksin)
-        val heartRate = 78
-        // spo2 kaldırıldı
-        val temp = 36.5
-        val steps = 4520
-
-        // 3. Prompt Hazırla (Mühendislik Kısmı Burası)
-        // SpO2 satırı prompt'tan çıkarıldı.
-        val prompt = """
-            Act as a professional health consultant. Analyze the following user data collected from a smart wristband:
-            
-            - Heart Rate: $heartRate BPM
-            - Skin Temperature: $temp °C
-            - Steps Today: $steps
-            
-            Please provide:
-            1. A brief assessment of the current health status.
-            2. Potential reasons if any value is abnormal.
-            3. Three specific, actionable recommendations for the rest of the day.
-            
-            Keep the tone professional yet encouraging. Keep the response under 150 words.
-        """.trimIndent()
-
-        // 4. API İsteği (Asenkron)
         lifecycleScope.launch {
-            try {
-                val response = generativeModel.generateContent(prompt)
+            // 1. Veriyi Hazırla (Canlı yoksa geçmişe bak)
+            val data = withContext(Dispatchers.IO) { gatherSmartData() }
 
-                // Cevabı yazdır
-                binding.tvResult.text = response.text
-            } catch (e: Exception) {
-                binding.tvResult.text = "Error: ${e.localizedMessage}"
-            } finally {
+            if (BuildConfig.GEMINI_API_KEY.isBlank()) {
+                binding.tvResult.text = "Error: API Key missing."
                 binding.loadingBar.visibility = View.GONE
                 binding.btnAnalyze.isEnabled = true
+                return@launch
+            }
+
+            val prompt = """
+                Act as a professional health consultant. Analyze this biometric data (${data.source}):
+                
+                - Avg Heart Rate: ${data.hr} BPM
+                - Avg Temp: ${String.format("%.1f", data.temp)} °C
+                - Steps: ${data.steps}
+                
+                Provide 3 clear sections:
+                1. **Status**: Is this within healthy range?
+                2. **Observations**: Any anomalies? (If HR is 0, warn sensor issue).
+                3. **Recommendations**: 3 specific health tips.
+                
+                Keep under 150 words.
+            """.trimIndent()
+
+            var success = false
+            for (modelName in modelPriorities) {
+                if (success) break
+                try {
+                    withContext(Dispatchers.Main) { binding.tvResult.text = "Consulting $modelName..." }
+                    val model = GenerativeModel(modelName, BuildConfig.GEMINI_API_KEY)
+                    val response = model.generateContent(prompt)
+                    response.text?.let {
+                        withContext(Dispatchers.Main) { binding.tvResult.text = it }
+                        success = true
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Fail $modelName: ${e.message}")
+                }
+            }
+
+            withContext(Dispatchers.Main) {
+                binding.loadingBar.visibility = View.GONE
+                binding.btnAnalyze.isEnabled = true
+                if (!success) binding.tvResult.text = "Analysis failed. Check internet."
             }
         }
     }
+
+    private fun gatherSmartData(): AnalysisData {
+        val sharedPref = requireActivity().getSharedPreferences("HealthApp", Context.MODE_PRIVATE)
+        val liveHr = sharedPref.getInt("live_hr", 0)
+
+        // 1. Canlı veri varsa onu kullan
+        if (liveHr > 0) {
+            return AnalysisData(
+                liveHr,
+                sharedPref.getInt("live_steps", 0),
+                sharedPref.getFloat("live_temp", 0f).toDouble(),
+                "Live Data"
+            )
+        }
+
+        // 2. Canlı veri yoksa, son 7 günün ortalamasını al
+        try {
+            val history = DatabaseManager.getLast7Days(requireContext())
+            if (history.isNotEmpty()) {
+                val avgHr = history.map { it.avgHr }.average().toInt()
+                val avgSteps = history.map { it.steps }.average().toInt()
+                val avgTemp = history.map { it.avgTemp }.average()
+                return AnalysisData(avgHr, avgSteps, avgTemp, "Last 7 Days Average")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "DB Error", e)
+        }
+
+        return AnalysisData(0, 0, 0.0, "No Data")
+    }
+
+    data class AnalysisData(val hr: Int, val steps: Int, val temp: Double, val source: String)
 }

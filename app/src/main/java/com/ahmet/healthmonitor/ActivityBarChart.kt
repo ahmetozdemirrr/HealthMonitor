@@ -12,10 +12,8 @@ class ActivityBarChart @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null
 ) : View(context, attrs) {
 
-    private val stepsData = listOf(12500, 6500, 4000, 8800, 14200, 2500, 7000)
-
-    // --- YENİ EKLENEN: Gün İsimleri ---
-    private val days = listOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
+    private var stepsData: List<Int> = listOf()
+    private var days: List<String> = listOf()
 
     private var target = 6000
 
@@ -42,8 +40,17 @@ class ActivityBarChart @JvmOverloads constructor(
         invalidate()
     }
 
+    // Veriyi güncellemek için metod
+    fun setChartData(newSteps: List<Int>, newDays: List<String>) {
+        this.stepsData = newSteps
+        this.days = newDays
+        invalidate()
+    }
+
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
+
+        if (stepsData.isEmpty()) return
 
         val width = width.toFloat()
         val height = height.toFloat()
@@ -57,7 +64,9 @@ class ActivityBarChart @JvmOverloads constructor(
         val chartWidth = width - paddingLeft - paddingRight
 
         val barWidth = 40f
-        val stepX = chartWidth / (stepsData.size)
+        // Bölen 0 olmasın
+        val divCount = if (stepsData.isNotEmpty()) stepsData.size else 1
+        val stepX = chartWidth / divCount
 
         // Y Ekseni (Rakamlar)
         val maxVal = 15000
@@ -92,8 +101,7 @@ class ActivityBarChart @JvmOverloads constructor(
             val rect = RectF(left, top, right, bottom)
             canvas.drawRoundRect(rect, 10f, 10f, barPaint)
 
-            // --- YENİ EKLENEN KISIM: Gün ismini barın altına yaz ---
-            // height - paddingBottom + 40f -> Yazıyı barın biraz altına iteler
+            // Gün ismini barın altına yaz
             if (i < days.size) {
                 canvas.drawText(days[i], centerX, height - paddingBottom + 40f, dayTextPaint)
             }

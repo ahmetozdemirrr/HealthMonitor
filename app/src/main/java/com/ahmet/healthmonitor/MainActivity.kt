@@ -20,6 +20,11 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        // --- BU SATIR ÇOK ÖNEMLİ (EKSİK OLAN KISIM) ---
+        // Uygulama her açıldığında kontrol eder: Eğer veritabanı boşsa dummy verilerle doldurur.
+        // Bunu yapmazsak History ekranı boş kalır.
+        DatabaseManager.populateDummyDataIfEmpty(this)
+
         // Adapter Kurulumu
         val adapter = ViewPagerAdapter(this)
         binding.viewPager.adapter = adapter
@@ -72,6 +77,16 @@ class MainActivity : AppCompatActivity() {
                     apply()
                 }
 
+                // Canlı veriyi veritabanına kaydet (History grafikleri için)
+                if (data.heartRateBpm > 0) {
+                    DatabaseManager.saveLiveReading(
+                        this,
+                        data.heartRateBpm,
+                        data.temperature,
+                        data.stepCount
+                    )
+                }
+
                 // --- OTOMATİK DURDURMA MANTIĞI ---
                 // Eğer sensörden gelen ham veri çok düşükse (Saat takılı değilse)
                 if (data.heartRateRaw < 50000) {
@@ -99,23 +114,6 @@ class MainActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 Log.e("BLE_DATA", "Veri işleme hatası: ${e.message}")
             }
-        }
-    }
-
-    private fun saveDataToPreferences(data: HealthData) {
-        val sharedPref = getSharedPreferences("HealthApp", Context.MODE_PRIVATE)
-
-        with(sharedPref.edit()) {
-            // ESKİ HALİ: putInt("live_hr", data.heartRateRaw)  <-- HATA BURADA!
-
-            // YENİ HALİ (Bunu Yapıştır):
-            putInt("live_hr", data.heartRateBpm) // <-- Raw yerine BPM kullan!
-
-            putFloat("live_temp", data.temperature)
-            putInt("live_steps", data.stepCount)
-            putBoolean("is_worn", data.isWorn)
-            putBoolean("is_idle", data.isIdle)
-            apply()
         }
     }
 }

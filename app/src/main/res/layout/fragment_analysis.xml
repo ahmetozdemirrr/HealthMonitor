@@ -65,7 +65,7 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Get personalized health insights based on your recent Heart Rate, SpO2, and Temperature data."
+                    android:text="Get personalized health insights based on your recent Heart Rate, Step count, and Temperature data."
                     android:textColor="#666"
                     android:lineSpacingExtra="4dp"/>
             </LinearLayout>
