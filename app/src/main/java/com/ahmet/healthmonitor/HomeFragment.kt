@@ -15,10 +15,10 @@ import com.ahmet.healthmonitor.databinding.FragmentHomeBinding
 class HomeFragment : Fragment() {
     private lateinit var binding: FragmentHomeBinding
 
-    // Veri değişimini dinleyecek listener (live_spo2 kaldırıldı)
+    // Veri değişimini dinleyecek listener
     private val preferenceListener = SharedPreferences.OnSharedPreferenceChangeListener { sharedPreferences, key ->
         when (key) {
-            "live_hr", "live_temp", "live_steps" -> {
+            "live_hr", "live_temp", "live_steps", "monitoring_active" -> {
                 updateDashboardUI(sharedPreferences)
             }
         }
@@ -26,6 +26,29 @@ class HomeFragment : Fragment() {
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         binding = FragmentHomeBinding.inflate(inflater, container, false)
+
+        // --- UYANDIRMA BUTONU (GÜNCELLENMİŞ HALİ) ---
+        // Karta veya yazıya tıklayınca sistemi uyandır
+        val wakeUpListener = View.OnClickListener {
+            // 1. Hafızada 'Aktif' olarak işaretle
+            val sharedPref = requireActivity().getSharedPreferences("HealthApp", Context.MODE_PRIVATE)
+            sharedPref.edit().putBoolean("monitoring_active", true).apply()
+
+            // 2. BLE komutunu gönder (ESP32'ye "Gönder" de)
+            BleManager.setMonitoring(true)
+
+            // 3. UI'ı hemen güncelle (Kullanıcı tepki görsün)
+            binding.tvHeartRate.text = "..."
+            binding.tvHeartRate.textSize = 42f
+            binding.tvHeartRate.setTextColor(Color.BLACK)
+
+            android.widget.Toast.makeText(requireContext(), "Veri akışı başlatılıyor...", android.widget.Toast.LENGTH_SHORT).show()
+        }
+
+        // Hem karta hem de yazıya tıklama özelliği verelim
+        binding.cardHeartRate.setOnClickListener(wakeUpListener)
+        binding.tvHeartRate.setOnClickListener(wakeUpListener)
+
         return binding.root
     }
 
@@ -46,20 +69,40 @@ class HomeFragment : Fragment() {
         sharedPref.unregisterOnSharedPreferenceChangeListener(preferenceListener)
     }
 
+    // UI Güncelleme Fonksiyonu
     private fun updateDashboardUI(sharedPref: SharedPreferences) {
-        // UI güncellemesi Main Thread'de olmalı
         if (!isAdded) return
 
         activity?.runOnUiThread {
             val hr = sharedPref.getInt("live_hr", 0)
-            // spo2 değişkeni kaldırıldı
             val temp = sharedPref.getFloat("live_temp", 0.0f)
             val steps = sharedPref.getInt("live_steps", 0)
 
-            // Değerleri yazdır
-            binding.tvHeartRate.text = if (hr > 0) hr.toString() else "--"
-            // tvSpo2 satırı kaldırıldı. XML'den de silebilirsiniz.
-            binding.tvTemp.text = if (temp > 0) "${String.format("%.1f", temp)}°C" else "--°C"
+            // Sistemin aktif olup olmadığını kontrol et
+            val isActive = sharedPref.getBoolean("monitoring_active", true)
+
+            // --- DURUM KONTROLÜ ---
+            if (!isActive) {
+                // DURUM 1: SİSTEM DURDU (Kırmızı ve Yazı)
+                binding.tvHeartRate.text = "BAŞLAT"
+                binding.tvHeartRate.textSize = 24f // Yazı sığsın diye küçültüyoruz
+                binding.tvHeartRate.setTextColor(Color.RED)
+            }
+            else if (hr == 0) {
+                // DURUM 2: ÖLÇÜLÜYOR (Siyah ve Noktalar)
+                binding.tvHeartRate.text = "..."
+                binding.tvHeartRate.textSize = 42f
+                binding.tvHeartRate.setTextColor(Color.BLACK)
+            }
+            else {
+                // DURUM 3: VERİ VAR (Siyah ve Değer)
+                binding.tvHeartRate.text = hr.toString()
+                binding.tvHeartRate.textSize = 42f
+                binding.tvHeartRate.setTextColor(Color.BLACK)
+            }
+
+            // Diğer veriler her zaman görünür
+            binding.tvTemp.text = if (temp > 0) "${String.format("%.1f", temp)}°C" else "--"
             binding.tvSteps.text = if (steps > 0) steps.toString() else "0"
         }
     }

@@ -11,6 +11,7 @@ import com.ahmet.healthmonitor.databinding.ActivityMainBinding
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
+    private var emptyDataCounter = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO)
@@ -55,14 +56,46 @@ class MainActivity : AppCompatActivity() {
         // Veri geldiğinde ne yapılacağını tanımla
         BleManager.onDataReceived = { bytes ->
             try {
-                // 1. Binary veriyi anlamlı modele çevir
                 val data = BleDataParser.parse(bytes)
 
-                // 2. Verileri kaydet (HomeFragment buradan okuyacak)
-                saveDataToPreferences(data)
+                // Önce verileri kaydet
+                val sharedPref = getSharedPreferences("HealthApp", Context.MODE_PRIVATE)
+                with(sharedPref.edit()) {
+                    putInt("live_hr", data.heartRateBpm)
+                    putFloat("live_temp", data.temperature)
+                    putInt("live_steps", data.stepCount)
 
-                // SpO2 logu kaldırıldı
-                Log.d("BLE_DATA", "Adım: ${data.stepCount}, Temp: ${data.temperature}")
+                    // Veri geliyorsa sistem aktiftir
+                    if (data.heartRateRaw > 50000) {
+                        putBoolean("monitoring_active", true)
+                    }
+                    apply()
+                }
+
+                // --- OTOMATİK DURDURMA MANTIĞI ---
+                // Eğer sensörden gelen ham veri çok düşükse (Saat takılı değilse)
+                if (data.heartRateRaw < 50000) {
+                    emptyDataCounter++
+
+                    // Yaklaşık 4 saniye (40 paket) boyunca veri gelmezse durdur
+                    if (emptyDataCounter > 40) {
+                        runOnUiThread {
+                            // 1. Veri akışını fiziksel olarak kes
+                            BleManager.setMonitoring(false)
+
+                            // 2. Sistemin durduğunu hafızaya yaz (Kritik Nokta)
+                            sharedPref.edit().putBoolean("monitoring_active", false).apply()
+
+                            // 3. Kullanıcıya bilgi ver
+                            android.widget.Toast.makeText(this, "Saat çıkarıldı. Tasarruf modu aktif.", android.widget.Toast.LENGTH_SHORT).show()
+
+                            emptyDataCounter = 0
+                        }
+                    }
+                } else {
+                    emptyDataCounter = 0
+                }
+
             } catch (e: Exception) {
                 Log.e("BLE_DATA", "Veri işleme hatası: ${e.message}")
             }
@@ -73,17 +106,16 @@ class MainActivity : AppCompatActivity() {
         val sharedPref = getSharedPreferences("HealthApp", Context.MODE_PRIVATE)
 
         with(sharedPref.edit()) {
-            // Canlı değerleri güncelle
-            putInt("live_hr", data.heartRateRaw) // Ham sinyal veya nabız
-            // live_spo2 satırı silindi
+            // ESKİ HALİ: putInt("live_hr", data.heartRateRaw)  <-- HATA BURADA!
+
+            // YENİ HALİ (Bunu Yapıştır):
+            putInt("live_hr", data.heartRateBpm) // <-- Raw yerine BPM kullan!
+
             putFloat("live_temp", data.temperature)
             putInt("live_steps", data.stepCount)
-
-            // Durum bilgilerini de ekleyebiliriz
             putBoolean("is_worn", data.isWorn)
             putBoolean("is_idle", data.isIdle)
-
-            apply() // Asenkron kaydet (UI'ı kilitlemez)
+            apply()
         }
     }
 }

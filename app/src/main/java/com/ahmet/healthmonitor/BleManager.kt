@@ -117,27 +117,26 @@ object BleManager {
         }
 
         private fun processData(data: ByteArray) {
-            // 1. Veriyi Parse Et
+            // 1. Veriyi Parse Et (BPM hesaplandı)
             val healthData = BleDataParser.parse(data)
 
-            // 2. SharedPreferences'a Kaydet (Canlı Veri)
+            // 2. SharedPreferences'a Kaydet
             appContext?.let { ctx ->
                 val sharedPref = ctx.getSharedPreferences("HealthApp", Context.MODE_PRIVATE)
                 with(sharedPref.edit()) {
-                    putInt("live_hr", healthData.heartRateRaw)
+                    // DİKKAT: heartRateRaw DEĞİL, heartRateBpm KULLANIYORUZ
+                    putInt("live_hr", healthData.heartRateBpm)
                     putFloat("live_temp", healthData.temperature)
                     putInt("live_steps", healthData.stepCount)
-                    // SpO2 kaydı silindi
                     apply()
                 }
 
                 // 3. Veritabanına Kaydet
                 DatabaseManager.saveLiveReading(
                     ctx,
-                    healthData.heartRateRaw,
+                    healthData.heartRateBpm, // <-- BURASI DA DEĞİŞTİ (Raw -> Bpm)
                     healthData.temperature,
                     healthData.stepCount
-                    // SpO2 parametresi silindi
                 )
             }
 
@@ -157,4 +156,45 @@ object BleManager {
     }
 
     fun isDeviceConnected(): Boolean = isConnected
+
+    // --- YENİ EKLENECEK FONKSİYON ---
+    @SuppressLint("MissingPermission")
+    fun setMonitoring(enable: Boolean) {
+        val gatt = bluetoothGatt
+        if (gatt == null) {
+            Log.e("BLE", "GATT null, işlem yapılamadı.")
+            return
+        }
+
+        val service = gatt.getService(SERVICE_UUID)
+        if (service == null) {
+            Log.e("BLE", "Servis bulunamadı.")
+            return
+        }
+
+        val characteristic = service.getCharacteristic(CHAR_UUID)
+        if (characteristic == null) {
+            Log.e("BLE", "Karakteristik bulunamadı.")
+            return
+        }
+
+        // 1. Android tarafında bildirimleri aç/kapat
+        gatt.setCharacteristicNotification(characteristic, enable)
+
+        // 2. ESP32'ye "Bana veri gönderme" veya "Gönder" komutunu yaz (CCCD)
+        val descriptor = characteristic.getDescriptor(DESCRIPTOR_UUID)
+        if (descriptor != null) {
+            val value = if (enable) BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE else BluetoothGattDescriptor.DISABLE_NOTIFICATION_VALUE
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                gatt.writeDescriptor(descriptor, value)
+            } else {
+                @Suppress("DEPRECATION")
+                descriptor.value = value
+                @Suppress("DEPRECATION")
+                gatt.writeDescriptor(descriptor)
+            }
+            Log.d("BLE", "Veri akışı durumu değiştirildi: $enable")
+        }
+    }
 }
